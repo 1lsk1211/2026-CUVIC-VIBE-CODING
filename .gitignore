@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# Next.js / build output
+.next/
+out/
+build/
+dist/
+
+# env (토큰·키 포함, 절대 커밋 금지)
+.env
+.env*.local
+
+# test / coverage
+coverage/
+
+# misc
+.DS_Store
+*.log
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+
+# Windows -> WSL 복사 시 생기는 메타데이터 파일
+*:Zone.Identifier
+
+# Claude Code 개인 설정
+.claude/settings.local.json
