@@ -9,7 +9,8 @@ process.stdin.on("data", (chunk) => (raw += chunk));
 process.stdin.on("end", () => {
   try {
     const input = JSON.parse(raw);
-    const prompt = (input.prompt || "").trim();
+    // IDE가 자동으로 붙이는 <ide_opened_file>, <ide_selection> 등은 사용자가 입력한 내용이 아니므로 제외
+    const prompt = (input.prompt || "").replace(/<(ide_[a-z_]+)>[\s\S]*?<\/\1>/g, "").trim();
     if (!prompt) return;
 
     const projectDir = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
