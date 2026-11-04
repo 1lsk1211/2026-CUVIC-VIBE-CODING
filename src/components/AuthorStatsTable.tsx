@@ -7,6 +7,8 @@ function format(value: number): string {
 }
 
 export function AuthorStatsTable({ result }: { result: AnalyzeResponse }) {
+  const { activity } = result;
+
   return (
     <section className="flex flex-col gap-4">
       <div className="text-sm leading-6 text-neutral-600 dark:text-neutral-400">
@@ -29,6 +31,17 @@ export function AuthorStatsTable({ result }: { result: AnalyzeResponse }) {
           <p className="mt-2 rounded bg-amber-100 px-3 py-2 text-amber-900 dark:bg-amber-950 dark:text-amber-200">
             전체 커밋 {format(result.totalCommits)}개 중 최근 {format(result.analyzedCommits)}개만
             분석한 결과입니다.
+          </p>
+        )}
+        <p className="mt-2">
+          수집한 활동: PR {format(activity.collectedPullRequests)}개, 리뷰{" "}
+          {format(activity.collectedReviews)}개, 이슈 {format(activity.collectedIssues)}개
+        </p>
+        {(activity.totalPullRequests > activity.collectedPullRequests ||
+          activity.totalIssues > activity.collectedIssues) && (
+          <p className="mt-2 rounded bg-amber-100 px-3 py-2 text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            전체 PR {format(activity.totalPullRequests)}개, 이슈 {format(activity.totalIssues)}개 중
+            최근 항목만 수집한 결과입니다.
           </p>
         )}
       </div>

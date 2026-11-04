@@ -52,12 +52,67 @@ export interface AggregationResult {
   excludedLines: number;
 }
 
+export interface ActivityAuthor {
+  login: string;
+  isBot: boolean;
+}
+
+export type ReviewState = "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISMISSED";
+
+export interface PullRequestReview {
+  url: string;
+  state: ReviewState;
+  submittedAt: string | null;
+  /** 탈퇴 등으로 계정 정보가 없으면 null이다. */
+  author: ActivityAuthor | null;
+}
+
+export interface PullRequestActivity {
+  number: number;
+  url: string;
+  title: string;
+  state: "OPEN" | "CLOSED" | "MERGED";
+  createdAt: string;
+  mergedAt: string | null;
+  closedAt: string | null;
+  /** 탈퇴 등으로 계정 정보가 없으면 null이다. */
+  author: ActivityAuthor | null;
+  reviews: PullRequestReview[];
+}
+
+export interface IssueActivity {
+  number: number;
+  url: string;
+  title: string;
+  state: "OPEN" | "CLOSED";
+  createdAt: string;
+  closedAt: string | null;
+  /** 탈퇴 등으로 계정 정보가 없으면 null이다. */
+  author: ActivityAuthor | null;
+}
+
+export interface RepositoryActivity {
+  pullRequests: PullRequestActivity[];
+  totalPullRequests: number;
+  issues: IssueActivity[];
+  totalIssues: number;
+}
+
+export interface ActivitySummary {
+  collectedPullRequests: number;
+  totalPullRequests: number;
+  collectedReviews: number;
+  collectedIssues: number;
+  totalIssues: number;
+}
+
 export interface AnalyzeResponse extends AggregationResult {
   repo: RepoRef;
   defaultBranch: string | null;
   analyzedCommits: number;
   totalCommits: number;
   truncated: boolean;
+  activity: ActivitySummary;
 }
 
 export interface AnalyzeErrorResponse {
