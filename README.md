@@ -30,8 +30,10 @@
 ## 동작 흐름
 
 ```
-레포 URL + 토큰 입력
-  → GitHub 데이터 수집 (커밋 / PR / 리뷰 / 이슈)
+레포 URL 입력 (private 레포는 4단계부터 토큰 입력 지원)
+  → GitHub 데이터 수집
+      - 커밋 목록 / PR / 리뷰 / 이슈: GraphQL
+      - 커밋별 파일 변경 내역: REST (생성 파일 필터링에 필요)
   → 생성 파일 필터링
   → 작성자 매핑
   → 축별 집계
@@ -43,8 +45,9 @@
 ## 기술 스택
 
 - **Frontend / API**: Next.js (App Router), TypeScript, Tailwind CSS
-- **데이터 수집**: GitHub REST / GraphQL API
-- **DB**: Supabase
+- **데이터 수집**: GitHub REST / GraphQL API (Octokit)
+- **검증·테스트**: zod, Vitest
+- **DB**: Supabase (커밋 상세 캐시)
 - **AI**: LLM API (회의록 파싱, 기여 요약)
 - **배포**: Vercel
 
@@ -53,8 +56,8 @@
 > 개발 진행 중입니다. 아래 내용은 구현에 맞춰 갱신됩니다.
 
 ```bash
-git clone https://github.com/<아이디>/<레포명>.git
-cd <레포명>
+git clone https://github.com/1lsk1211/2026-CUVIC-VIBE-CODING.git
+cd 2026-CUVIC-VIBE-CODING
 npm install
 npm run dev
 ```
@@ -62,18 +65,18 @@ npm run dev
 `.env.local` 파일에 다음 값을 설정합니다.
 
 ```
-GITHUB_TOKEN=        # GitHub Personal Access Token
-LLM_API_KEY=         # LLM API 키
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
+GITHUB_TOKEN=               # GitHub Personal Access Token (서버 전용)
+LLM_API_KEY=                # LLM API 키 (서버 전용)
+SUPABASE_URL=               # 3단계부터 필요
+SUPABASE_SERVICE_ROLE_KEY=  # 3단계부터 필요 (서버 전용, 클라이언트 노출 금지)
 ```
 
 ## 로드맵
 
 - [ ] 1단계: GitHub 데이터 수집, 생성 파일 필터링, 작성자 매핑
 - [ ] 2단계: 집계 로직 + 차트 리포트 UI
-- [ ] 3단계: 회의록 LLM 분석 및 결과 병합
-- [ ] 4단계: AI 요약, 배포, 데모 준비
+- [ ] 3단계: 회의록 LLM 분석 및 결과 병합, 커밋 상세 캐시(Supabase)
+- [ ] 4단계: AI 요약(출력 수치 검증 포함), private 레포 토큰 입력, 배포, 데모 준비
 
 ## 개발 기록
 
