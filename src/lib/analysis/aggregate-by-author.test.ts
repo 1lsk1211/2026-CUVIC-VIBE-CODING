@@ -35,10 +35,15 @@ describe("aggregateByAuthor", () => {
         id: "login:alice",
         displayName: "alice",
         isLinked: true,
+        kind: "member",
         commits: 2,
         additions: 21,
         deletions: 7,
         changedLines: 28,
+        pullRequests: 0,
+        reviews: 0,
+        issues: 0,
+        possibleSameAs: [],
       },
     ]);
     expect(result.countedCommits).toBe(2);
@@ -93,13 +98,118 @@ describe("aggregateByAuthor", () => {
     });
   });
 
-  it("이메일이 달라도 login이 없으면 매핑 전까지 별도 행으로 둔다", () => {
+  it("이름만 같은 작성자는 합치지 않고 같은 사람일 가능성만 표시한다", () => {
     const result = aggregateByAuthor([
       commit({ login: null, name: "민수", email: "a@example.com" }, [source]),
-      commit({ login: null, name: "민수", email: "b@example.com" }, [source]),
+      commit({ login: null, name: " 민수 ", email: "b@example.com" }, [source]),
+      commit({ login: null, name: "지영", email: "c@example.com" }, [source]),
     ]);
 
-    expect(result.authors.map((author) => author.id)).toEqual(["unlinked:1", "unlinked:2"]);
+    expect(result.authors).toHaveLength(3);
+    const [first, second, third] = result.authors;
+    expect(first.possibleSameAs).toEqual([second.id]);
+    expect(second.possibleSameAs).toEqual([first.id]);
+    expect(third.possibleSameAs).toEqual([]);
+  });
+
+  it("미연결 작성자의 이름이 다른 계정의 로그인과 같아도 가능성만 표시한다", () => {
+    const result = aggregateByAuthor([
+      commit(alice, [source]),
+      commit({ login: null, name: "Alice", email: "other@example.com" }, [source]),
+    ]);
+
+    expect(result.authors).toHaveLength(2);
+    expect(result.authors[0].possibleSameAs).toEqual([result.authors[1].id]);
+  });
+
+  it("미연결 작성자의 id는 다시 집계해도 같고 이메일 원문을 담지 않는다", () => {
+    const commits = [commit({ login: null, name: "민수", email: "minsu@example.com" }, [source])];
+    const [first] = aggregateByAuthor(commits).authors;
+    const [second] = aggregateByAuthor(commits).authors;
+
+    expect(first.id).toMatch(/^unlinked:[0-9a-f]{16}$/);
+    expect(first.id).toBe(second.id);
+  });
+
+  it("noreply 이메일과 로그인과 연결된 이메일을 한 사람으로 통합한다", () => {
+    const result = aggregateByAuthor([
+      commit(alice, [source]),
+      commit({ login: null, name: "A", email: "1+alice@users.noreply.github.com" }, [source]),
+      commit({ login: null, name: "앨리스", email: "a@example.com" }, [source]),
+    ]);
+
+    expect(result.authors).toHaveLength(1);
+    expect(result.authors[0]).toMatchObject({ id: "login:alice", isLinked: true, commits: 3 });
+  });
+
+  it("AI와 봇 계정을 분류하고 팀원과의 이름 일치 표시에서 제외한다", () => {
+    const result = aggregateByAuthor([
+      commit({ login: "claude", name: "Claude", email: "noreply@anthropic.com" }, [source]),
+      commit({ login: null, name: "dependabot[bot]", email: null }, [source]),
+      commit({ login: null, name: "Claude", email: "claude@example.com" }, [source]),
+    ]);
+
+    const byId = new Map(result.authors.map((author) => [author.displayName, author]));
+    expect(byId.get("claude")).toMatchObject({ kind: "ai", possibleSameAs: [] });
+    expect(byId.get("dependabot[bot]")).toMatchObject({ kind: "bot" });
+    expect(byId.get("Claude")).toMatchObject({ kind: "member", possibleSameAs: [] });
+  });
+
+  it("PR·리뷰·이슈를 작성자별로 세고 활동만 있는 작성자도 포함한다", () => {
+    const pullRequest = {
+      number: 1,
+      url: "https://github.com/o/r/pull/1",
+      title: "pr",
+      state: "MERGED" as const,
+      createdAt: "2026-01-01T00:00:00Z",
+      mergedAt: null,
+      closedAt: null,
+    };
+    const review = {
+      url: "https://github.com/o/r/pull/1#r",
+      state: "APPROVED" as const,
+      submittedAt: "2026-01-02T00:00:00Z",
+    };
+    const aliceAccount = { login: "Alice", isBot: false };
+    const bobAccount = { login: "bob", isBot: false };
+
+    const result = aggregateByAuthor([commit(alice, [source])], {
+      pullRequests: [
+        {
+          ...pullRequest,
+          author: aliceAccount,
+          reviews: [
+            { ...review, author: bobAccount },
+            { ...review, author: aliceAccount },
+            { ...review, author: null },
+          ],
+        },
+        { ...pullRequest, author: null, reviews: [] },
+      ],
+      totalPullRequests: 2,
+      issues: [
+        {
+          number: 2,
+          url: "https://github.com/o/r/issues/2",
+          title: "issue",
+          state: "OPEN",
+          createdAt: "2026-01-01T00:00:00Z",
+          closedAt: null,
+          author: { login: "renovate", isBot: true },
+        },
+      ],
+      totalIssues: 1,
+    });
+
+    expect(result.authors.map((author) => [author.displayName, author.kind])).toEqual([
+      ["alice", "member"],
+      ["bob", "member"],
+      ["renovate", "bot"],
+    ]);
+    expect(result.authors[0]).toMatchObject({ commits: 1, pullRequests: 1, reviews: 0 });
+    expect(result.authors[1]).toMatchObject({ commits: 0, reviews: 1 });
+    expect(result.authors[2]).toMatchObject({ commits: 0, issues: 1 });
+    expect(result.unattributedActivities).toBe(2);
   });
 
   it("이메일과 이름이 모두 없어도 처리한다", () => {
@@ -136,6 +246,7 @@ describe("aggregateByAuthor", () => {
       commitsWithoutCountableFiles: 0,
       excludedFileChanges: 0,
       excludedLines: 0,
+      unattributedActivities: 0,
     });
   });
 });

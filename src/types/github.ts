@@ -30,16 +30,25 @@ export interface CommitWithFiles extends CommitSummary {
   files: FileChange[];
 }
 
+export type AccountKind = "member" | "ai" | "bot";
+
 export interface AuthorStats {
-  /** 화면 구분용 식별자. 이메일을 담지 않는다. */
+  /** 다시 분석해도 유지되는 식별자. 이메일 원문을 담지 않는다. */
   id: string;
   displayName: string;
   /** GitHub 계정과 연결된 작성자인지 여부 */
   isLinked: boolean;
+  kind: AccountKind;
   commits: number;
   additions: number;
   deletions: number;
   changedLines: number;
+  pullRequests: number;
+  /** 본인 PR에 남긴 리뷰는 제외한 수 */
+  reviews: number;
+  issues: number;
+  /** 이름이 같아 같은 사람일 가능성이 있는 작성자의 id. 자동으로 합치지 않는다. */
+  possibleSameAs: string[];
 }
 
 export interface AggregationResult {
@@ -50,6 +59,8 @@ export interface AggregationResult {
   commitsWithoutCountableFiles: number;
   excludedFileChanges: number;
   excludedLines: number;
+  /** 작성자 계정 정보가 없어 작성자별 수치에 넣지 못한 PR·리뷰·이슈 수 */
+  unattributedActivities: number;
 }
 
 export interface ActivityAuthor {

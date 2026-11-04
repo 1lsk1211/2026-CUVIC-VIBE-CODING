@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const withFiles = await fetchCommitDetails(octokit, repo, commits);
 
     const response: AnalyzeResponse = {
-      ...aggregateByAuthor(withFiles),
+      ...aggregateByAuthor(withFiles, activity),
       repo,
       defaultBranch,
       analyzedCommits: commits.length,
