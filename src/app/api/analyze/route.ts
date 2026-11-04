@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { aggregateByAuthor } from "@/lib/analysis/aggregate-by-author";
+import { summarizeActivity } from "@/lib/analysis/summarize-activity";
 import { createGitHubClient } from "@/lib/github/client";
 import { type GitHubErrorKind, toGitHubApiError } from "@/lib/github/errors";
 import { fetchCommitDetails } from "@/lib/github/fetch-commit-details";
 import { fetchCommits } from "@/lib/github/fetch-commits";
+import { fetchRepositoryActivity } from "@/lib/github/fetch-repository-activity";
 import { parseRepoUrl } from "@/lib/github/parse-repo-url";
 import type { AnalyzeErrorResponse, AnalyzeResponse } from "@/types/github";
 
@@ -34,15 +36,18 @@ export async function POST(request: Request) {
   try {
     const octokit = createGitHubClient();
     const { defaultBranch, totalCommits, commits } = await fetchCommits(octokit, repo);
+    // 요청 수가 많은 커밋 상세보다 먼저 수집해, 실패하면 빠르게 안내한다.
+    const activity = await fetchRepositoryActivity(octokit, repo);
     const withFiles = await fetchCommitDetails(octokit, repo, commits);
 
     const response: AnalyzeResponse = {
-      ...aggregateByAuthor(withFiles),
+      ...aggregateByAuthor(withFiles, activity),
       repo,
       defaultBranch,
       analyzedCommits: commits.length,
       totalCommits,
       truncated: totalCommits > commits.length,
+      activity: summarizeActivity(activity),
     };
     return Response.json(response);
   } catch (error) {
