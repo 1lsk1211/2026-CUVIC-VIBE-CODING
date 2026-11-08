@@ -3,6 +3,12 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --chart-series-1: #2a78d6;
+  --chart-series-2: #eb6834;
+  --chart-series-3: #1baf7a;
+  --chart-neutral: #6f6e68;
+  --chart-grid: #e5e5e5;
+  --chart-baseline: #737373;
 }
 
 @theme inline {
@@ -16,6 +22,12 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    --chart-series-1: #3987e5;
+    --chart-series-2: #d95926;
+    --chart-series-3: #199e70;
+    --chart-neutral: #a3a29b;
+    --chart-grid: #333333;
+    --chart-baseline: #a3a3a3;
   }
 }
 
