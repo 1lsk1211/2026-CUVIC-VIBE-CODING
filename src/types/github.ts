@@ -32,6 +32,40 @@ export interface CommitWithFiles extends CommitSummary {
 
 export type AccountKind = "member" | "ai" | "bot";
 
+/** 작성자의 수치를 만든 항목의 ID 목록. 집계에서 제외된 항목은 들어가지 않는다. */
+export interface AuthorEvidence {
+  /** 커밋 sha */
+  commits: string[];
+  /** PR 번호 */
+  pullRequests: number[];
+  /** PullRequestReview.id */
+  reviews: string[];
+  /** 이슈 번호 */
+  issues: number[];
+}
+
+export interface EvidenceDetail {
+  title: string;
+  date: string;
+}
+
+export interface ReviewEvidenceDetail {
+  pullNumber: number;
+  state: ReviewState;
+  date: string | null;
+}
+
+/**
+ * 근거 ID로 찾는 제목과 날짜. 응답 크기를 줄이려고 항목마다 한 번만 담고 URL은 담지 않는다.
+ * 리뷰가 참조하는 PR도 들어 있으므로, 집계 포함 여부는 AuthorEvidence로 판단한다.
+ */
+export interface EvidenceCatalog {
+  commits: Record<string, EvidenceDetail>;
+  pullRequests: Record<number, EvidenceDetail>;
+  reviews: Record<string, ReviewEvidenceDetail>;
+  issues: Record<number, EvidenceDetail>;
+}
+
 export interface AuthorStats {
   /** 다시 분석해도 유지되는 식별자. 이메일 원문을 담지 않는다. */
   id: string;
@@ -49,10 +83,12 @@ export interface AuthorStats {
   issues: number;
   /** 이름이 같아 같은 사람일 가능성이 있는 작성자의 id. 자동으로 합치지 않는다. */
   possibleSameAs: string[];
+  evidence: AuthorEvidence;
 }
 
 export interface AggregationResult {
   authors: AuthorStats[];
+  evidenceCatalog: EvidenceCatalog;
   countedCommits: number;
   mergeCommits: number;
   /** 생성 파일만 바꿨거나 변경 파일이 없는 커밋 수 */

@@ -5,6 +5,8 @@ import type {
   AggregationResult,
   AuthorStats,
   CommitWithFiles,
+  EvidenceCatalog,
+  PullRequestActivity,
   RepositoryActivity,
 } from "@/types/github";
 import { classifyAccount } from "./classify-account";
@@ -46,6 +48,12 @@ export function aggregateByAuthor(
   const groups = new Map<string, AuthorGroup>();
   const namesByKey = new Map<string, Set<string>>();
   const kindsByKey = new Map<string, AccountKind>();
+  const evidenceCatalog: EvidenceCatalog = {
+    commits: {},
+    pullRequests: {},
+    reviews: {},
+    issues: {},
+  };
   let countedCommits = 0;
   let mergeCommits = 0;
   let commitsWithoutCountableFiles = 0;
@@ -77,6 +85,7 @@ export function aggregateByAuthor(
       pullRequests: 0,
       reviews: 0,
       issues: 0,
+      evidence: { commits: [], pullRequests: [], reviews: [], issues: [] },
     };
     groups.set(key, group);
     return group;
@@ -113,6 +122,8 @@ export function aggregateByAuthor(
     group.commits += 1;
     group.additions += sum(countable.map((file) => file.additions));
     group.deletions += sum(countable.map((file) => file.deletions));
+    group.evidence.commits.push(commit.sha);
+    evidenceCatalog.commits[commit.sha] = { title: commit.message, date: commit.committedAt };
   }
 
   /** 계정 정보가 없는 활동은 null을 반환하고 따로 센다. */
@@ -127,9 +138,17 @@ export function aggregateByAuthor(
     return getGroup(key, author.login, true);
   }
 
+  function addPullRequestDetail({ number, title, createdAt }: PullRequestActivity): void {
+    evidenceCatalog.pullRequests[number] = { title, date: createdAt };
+  }
+
   for (const pullRequest of activity.pullRequests) {
     const group = getActivityGroup(pullRequest.author);
-    if (group) group.pullRequests += 1;
+    if (group) {
+      group.pullRequests += 1;
+      group.evidence.pullRequests.push(pullRequest.number);
+      addPullRequestDetail(pullRequest);
+    }
 
     for (const review of pullRequest.reviews) {
       const isSelfReview =
@@ -139,13 +158,27 @@ export function aggregateByAuthor(
       if (isSelfReview) continue;
 
       const reviewer = getActivityGroup(review.author);
-      if (reviewer) reviewer.reviews += 1;
+      if (!reviewer) continue;
+
+      reviewer.reviews += 1;
+      reviewer.evidence.reviews.push(review.id);
+      evidenceCatalog.reviews[review.id] = {
+        pullNumber: pullRequest.number,
+        state: review.state,
+        date: review.submittedAt,
+      };
+      // 작성자 정보가 없어 집계되지 않은 PR이어도 리뷰에 제목을 붙일 수 있게 담는다.
+      addPullRequestDetail(pullRequest);
     }
   }
 
   for (const issue of activity.issues) {
     const group = getActivityGroup(issue.author);
-    if (group) group.issues += 1;
+    if (!group) continue;
+
+    group.issues += 1;
+    group.evidence.issues.push(issue.number);
+    evidenceCatalog.issues[issue.number] = { title: issue.title, date: issue.createdAt };
   }
 
   // 순위처럼 보이지 않도록 수치가 아니라 이름순으로 정렬한다.
@@ -174,6 +207,7 @@ export function aggregateByAuthor(
 
   return {
     authors,
+    evidenceCatalog,
     countedCommits,
     mergeCommits,
     commitsWithoutCountableFiles,

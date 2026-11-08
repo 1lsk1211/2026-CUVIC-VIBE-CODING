@@ -52,6 +52,9 @@ function mergeAuthors(members: readonly AuthorStats[]): AuthorStats {
   const primary = members.find((author) => author.isLinked) ?? members[0];
   const total = (select: (author: AuthorStats) => number) =>
     members.reduce((sum, author) => sum + select(author), 0);
+  const mergeIds = <T>(select: (author: AuthorStats) => readonly T[]) => [
+    ...new Set(members.flatMap(select)),
+  ];
 
   return {
     ...primary,
@@ -63,6 +66,12 @@ function mergeAuthors(members: readonly AuthorStats[]): AuthorStats {
     reviews: total((author) => author.reviews),
     issues: total((author) => author.issues),
     possibleSameAs: members.flatMap((author) => author.possibleSameAs),
+    evidence: {
+      commits: mergeIds((author) => author.evidence.commits),
+      pullRequests: mergeIds((author) => author.evidence.pullRequests),
+      reviews: mergeIds((author) => author.evidence.reviews),
+      issues: mergeIds((author) => author.evidence.issues),
+    },
   };
 }
 

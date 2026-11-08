@@ -1,17 +1,28 @@
 import { describe, expect, it } from "vitest";
-import type { CommitAuthor, CommitWithFiles, FileChange } from "@/types/github";
+import type {
+  CommitAuthor,
+  CommitWithFiles,
+  FileChange,
+  IssueActivity,
+  PullRequestActivity,
+  PullRequestReview,
+  RepositoryActivity,
+} from "@/types/github";
 import { aggregateByAuthor } from "./aggregate-by-author";
 
 const alice: CommitAuthor = { login: "alice", name: "Alice Kim", email: "a@example.com" };
+
+let nextSha = 0;
 
 function commit(
   author: CommitAuthor,
   files: FileChange[],
   parentCount = 1,
 ): CommitWithFiles {
+  const sha = `sha-${(nextSha += 1)}`;
   return {
-    sha: "sha",
-    url: "https://github.com/o/r/commit/sha",
+    sha,
+    url: `https://github.com/o/r/commit/${sha}`,
     message: "msg",
     committedAt: "2026-01-01T00:00:00Z",
     parentCount,
@@ -25,10 +36,9 @@ const lockFile: FileChange = { path: "package-lock.json", additions: 500, deleti
 
 describe("aggregateByAuthor", () => {
   it("작성자별 커밋 수와 라인 수를 합산한다", () => {
-    const result = aggregateByAuthor([
-      commit(alice, [source]),
-      commit(alice, [{ path: "src/b.ts", additions: 1, deletions: 3 }, source]),
-    ]);
+    const first = commit(alice, [source]);
+    const second = commit(alice, [{ path: "src/b.ts", additions: 1, deletions: 3 }, source]);
+    const result = aggregateByAuthor([first, second]);
 
     expect(result.authors).toEqual([
       {
@@ -44,6 +54,7 @@ describe("aggregateByAuthor", () => {
         reviews: 0,
         issues: 0,
         possibleSameAs: [],
+        evidence: { commits: [first.sha, second.sha], pullRequests: [], reviews: [], issues: [] },
       },
     ]);
     expect(result.countedCommits).toBe(2);
@@ -213,6 +224,138 @@ describe("aggregateByAuthor", () => {
     expect(result.unattributedActivities).toBe(2);
   });
 
+  describe("근거 수집", () => {
+    const aliceAccount = { login: "alice", isBot: false };
+    const bobAccount = { login: "bob", isBot: false };
+
+    function pullRequest(
+      number: number,
+      author: PullRequestActivity["author"],
+      reviews: PullRequestReview[] = [],
+    ): PullRequestActivity {
+      return {
+        number,
+        url: `https://github.com/o/r/pull/${number}`,
+        title: `PR ${number}`,
+        state: "MERGED",
+        createdAt: "2026-01-01T00:00:00Z",
+        mergedAt: null,
+        closedAt: null,
+        author,
+        reviews,
+      };
+    }
+
+    function review(id: string, author: PullRequestReview["author"]): PullRequestReview {
+      return {
+        id,
+        url: `https://github.com/o/r/pull/1#pullrequestreview-${id}`,
+        state: "APPROVED",
+        submittedAt: "2026-01-02T00:00:00Z",
+        author,
+      };
+    }
+
+    function issue(number: number, author: IssueActivity["author"]): IssueActivity {
+      return {
+        number,
+        url: `https://github.com/o/r/issues/${number}`,
+        title: `이슈 ${number}`,
+        state: "OPEN",
+        createdAt: "2026-01-03T00:00:00Z",
+        closedAt: null,
+        author,
+      };
+    }
+
+    function activity(
+      pullRequests: PullRequestActivity[],
+      issues: IssueActivity[] = [],
+    ): RepositoryActivity {
+      return {
+        pullRequests,
+        totalPullRequests: pullRequests.length,
+        issues,
+        totalIssues: issues.length,
+      };
+    }
+
+    it("머지 커밋과 생성 파일만 바꾼 커밋은 근거에 넣지 않는다", () => {
+      const counted = commit(alice, [source, lockFile]);
+      const merge = commit(alice, [source], 2);
+      const generatedOnly = commit(alice, [lockFile]);
+
+      const result = aggregateByAuthor([counted, merge, generatedOnly]);
+
+      expect(result.authors[0].evidence.commits).toEqual([counted.sha]);
+      expect(Object.keys(result.evidenceCatalog.commits)).toEqual([counted.sha]);
+      expect(result.evidenceCatalog.commits[counted.sha]).toEqual({
+        title: counted.message,
+        date: counted.committedAt,
+      });
+    });
+
+    it("셀프 리뷰와 작성자 정보가 없는 활동은 근거에 넣지 않는다", () => {
+      const result = aggregateByAuthor(
+        [],
+        activity(
+          [
+            pullRequest(1, aliceAccount, [
+              review("10", bobAccount),
+              review("11", aliceAccount),
+              review("12", null),
+            ]),
+          ],
+          [issue(2, null), issue(3, bobAccount)],
+        ),
+      );
+
+      const [aliceRow, bobRow] = result.authors;
+      expect(aliceRow.evidence).toEqual({
+        commits: [],
+        pullRequests: [1],
+        reviews: [],
+        issues: [],
+      });
+      expect(bobRow.evidence).toEqual({
+        commits: [],
+        pullRequests: [],
+        reviews: ["10"],
+        issues: [3],
+      });
+      expect(Object.keys(result.evidenceCatalog.reviews)).toEqual(["10"]);
+      expect(Object.keys(result.evidenceCatalog.issues)).toEqual(["3"]);
+    });
+
+    it("수치와 근거 개수가 같다", () => {
+      const result = aggregateByAuthor(
+        [commit(alice, [source]), commit(alice, [source])],
+        activity(
+          [pullRequest(1, aliceAccount, [review("10", bobAccount), review("11", bobAccount)])],
+          [issue(2, aliceAccount)],
+        ),
+      );
+
+      for (const author of result.authors) {
+        expect(author.evidence.commits).toHaveLength(author.commits);
+        expect(author.evidence.pullRequests).toHaveLength(author.pullRequests);
+        expect(author.evidence.reviews).toHaveLength(author.reviews);
+        expect(author.evidence.issues).toHaveLength(author.issues);
+      }
+    });
+
+    it("작성자 정보가 없는 PR은 집계하지 않아도 리뷰의 제목을 찾을 수 있다", () => {
+      const result = aggregateByAuthor(
+        [],
+        activity([pullRequest(1, null, [review("10", bobAccount)])]),
+      );
+
+      expect(result.authors.map((author) => author.evidence.pullRequests)).toEqual([[]]);
+      expect(result.evidenceCatalog.reviews["10"]).toMatchObject({ pullNumber: 1 });
+      expect(result.evidenceCatalog.pullRequests[1].title).toBe("PR 1");
+    });
+  });
+
   it("이메일과 이름이 모두 없어도 처리한다", () => {
     const result = aggregateByAuthor([
       commit({ login: null, name: null, email: null }, [source]),
@@ -242,6 +385,7 @@ describe("aggregateByAuthor", () => {
   it("빈 입력을 처리한다", () => {
     expect(aggregateByAuthor([])).toEqual({
       authors: [],
+      evidenceCatalog: { commits: {}, pullRequests: {}, reviews: {}, issues: {} },
       countedCommits: 0,
       mergeCommits: 0,
       commitsWithoutCountableFiles: 0,
