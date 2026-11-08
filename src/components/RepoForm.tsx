@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import type { AnalyzeErrorResponse, AnalyzeResponse } from "@/types/github";
-import { AuthorStatsTable } from "./AuthorStatsTable";
+import { ContributionReport } from "./ContributionReport";
 
 function describeError(body: AnalyzeErrorResponse): string {
   if (!body.retryAt) return body.error;
@@ -75,7 +75,7 @@ export function RepoForm() {
           {error}
         </p>
       )}
-      {result && <AuthorStatsTable result={result} />}
+      {result && <ContributionReport result={result} />}
     </div>
   );
 }
