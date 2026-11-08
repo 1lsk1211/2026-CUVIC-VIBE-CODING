@@ -71,6 +71,8 @@ export interface ActivityAuthor {
 export type ReviewState = "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISMISSED";
 
 export interface PullRequestReview {
+  /** GitHub의 숫자 ID. 없으면 GraphQL 노드 ID다. */
+  id: string;
   url: string;
   state: ReviewState;
   submittedAt: string | null;

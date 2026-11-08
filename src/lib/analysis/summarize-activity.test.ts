@@ -4,6 +4,7 @@ import { summarizeActivity } from "./summarize-activity";
 
 function pullRequest(reviewCount: number): PullRequestActivity {
   const review: PullRequestReview = {
+    id: "1",
     url: "https://github.com/o/r/pull/1#r",
     state: "COMMENTED",
     submittedAt: "2026-01-02T00:00:00Z",

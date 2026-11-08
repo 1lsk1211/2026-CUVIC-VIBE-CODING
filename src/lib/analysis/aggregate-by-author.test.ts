@@ -166,6 +166,7 @@ describe("aggregateByAuthor", () => {
       closedAt: null,
     };
     const review = {
+      id: "1",
       url: "https://github.com/o/r/pull/1#r",
       state: "APPROVED" as const,
       submittedAt: "2026-01-02T00:00:00Z",
