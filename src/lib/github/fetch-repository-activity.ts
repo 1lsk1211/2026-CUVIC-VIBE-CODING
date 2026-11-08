@@ -22,6 +22,8 @@ const REVIEW_FIELDS = /* GraphQL */ `
     endCursor
   }
   nodes {
+    id
+    fullDatabaseId
     url
     state
     submittedAt
@@ -124,6 +126,9 @@ interface AuthorNode {
 }
 
 interface ReviewNode {
+  id: string;
+  /** BigInt 스칼라라 문자열로 온다. */
+  fullDatabaseId: string | null;
   url: string;
   state: ReviewState | "PENDING";
   submittedAt: string | null;
@@ -188,6 +193,7 @@ function toReviews(nodes: readonly ReviewNode[]): PullRequestReview[] {
       ? []
       : [
           {
+            id: node.fullDatabaseId ?? node.id,
             url: node.url,
             state: node.state,
             submittedAt: node.submittedAt,

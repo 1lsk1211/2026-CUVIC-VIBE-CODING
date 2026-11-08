@@ -21,6 +21,7 @@ function author(id: string, overrides: Partial<AuthorStats> = {}): AuthorStats {
     reviews: 2,
     issues: 3,
     possibleSameAs: [],
+    evidence: { commits: [], pullRequests: [], reviews: [], issues: [] },
     ...overrides,
   };
 }
@@ -90,6 +91,38 @@ describe("applyTeamMapping", () => {
     );
 
     expect(rows.map((row) => row.sourceIds)).toEqual([["a"], ["b", "c"]]);
+  });
+
+  it("묶은 작성자의 근거를 중복 없이 합친다", () => {
+    const rows = applyTeamMapping(
+      [
+        author("a", {
+          evidence: { commits: ["s1", "s2"], pullRequests: [1], reviews: ["r1"], issues: [7] },
+        }),
+        author("b", {
+          evidence: { commits: ["s2", "s3"], pullRequests: [1, 2], reviews: ["r2"], issues: [] },
+        }),
+      ],
+      [["a", "b"]],
+    );
+
+    expect(rows[0].evidence).toEqual({
+      commits: ["s1", "s2", "s3"],
+      pullRequests: [1, 2],
+      reviews: ["r1", "r2"],
+      issues: [7],
+    });
+  });
+
+  it("묶이지 않은 작성자와 AI·BOT의 근거는 그대로 둔다", () => {
+    const evidence = { commits: ["s1"], pullRequests: [1], reviews: ["r1"], issues: [2] };
+    const rows = applyTeamMapping(
+      [author("a-bot", { kind: "bot", evidence }), author("z-member")],
+      [["a-bot", "z-member"]],
+    );
+
+    expect(rows.find((row) => row.id === "a-bot")?.evidence).toEqual(evidence);
+    expect(rows.find((row) => row.id === "z-member")?.evidence.commits).toEqual([]);
   });
 });
 

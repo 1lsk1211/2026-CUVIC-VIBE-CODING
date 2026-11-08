@@ -11,6 +11,8 @@ function connection(nodes: unknown[], totalCount: number, endCursor: string | nu
 
 function review(id: string, overrides: object = {}) {
   return {
+    id: `PRR_${id}`,
+    fullDatabaseId: `db-${id}`,
     url: `https://github.com/o/r/pull/1#${id}`,
     state: "APPROVED",
     submittedAt: "2026-01-02T00:00:00Z",
@@ -91,6 +93,7 @@ describe("fetchRepositoryActivity", () => {
     });
     expect(result.pullRequests[0].reviews).toEqual([
       {
+        id: "db-r1",
         url: "https://github.com/o/r/pull/1#r1",
         state: "APPROVED",
         submittedAt: "2026-01-02T00:00:00Z",
@@ -146,6 +149,30 @@ describe("fetchRepositoryActivity", () => {
     expect(pullRequests[0].reviews.map((item) => item.url)).toEqual([
       "https://github.com/o/r/pull/1#r2",
     ]);
+  });
+
+  it("리뷰의 숫자 ID가 없으면 노드 ID를 식별자로 쓴다", async () => {
+    const { octokit } = client(
+      page(
+        connection(
+          [
+            pullRequest(1, {
+              reviews: {
+                pageInfo: { hasNextPage: false, endCursor: null },
+                nodes: [review("r1", { fullDatabaseId: null })],
+              },
+            }),
+          ],
+          1,
+          null,
+        ),
+        connection([], 0, null),
+      ),
+    );
+
+    const { pullRequests } = await fetchRepositoryActivity(octokit, repo, limits);
+
+    expect(pullRequests[0].reviews[0].id).toBe("PRR_r1");
   });
 
   it("끝나지 않은 쪽만 커서를 이어서 요청한다", async () => {
