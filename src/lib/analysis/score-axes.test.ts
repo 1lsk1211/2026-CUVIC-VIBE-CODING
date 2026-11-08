@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AuthorStats } from "@/types/github";
 import { applyTeamMapping, type TeamRow } from "./apply-team-mapping";
-import { type ScoreAxis, scoreTeamRows } from "./score-axes";
+import { type ScoreAxis, type ScoreMetric, scoreTeamRows } from "./score-axes";
 
 const EVIDENCE = { commits: [], pullRequests: [], reviews: [], issues: [] };
 
@@ -26,6 +26,10 @@ function stats(id: string, overrides: Partial<AuthorStats> = {}): AuthorStats {
 
 function row(id: string, overrides: Partial<AuthorStats> = {}): TeamRow {
   return { ...stats(id, overrides), sourceIds: [id], aliases: [], possibleSameAs: [] };
+}
+
+function metric(key: ScoreMetric["key"], weight = 1): ScoreMetric {
+  return { key, label: key, weight, evidence: "commits" };
 }
 
 function reviewers(...counts: number[]): TeamRow[] {
@@ -81,9 +85,23 @@ describe("scoreTeamRows", () => {
       row("a", { commits: 4, changedLines: 120, pullRequests: 2, reviews: 7, issues: 1 }),
     ])[0].axes;
 
-    expect(code.raw).toEqual({ commits: 4, changedLines: 120, pullRequests: 2 });
-    expect(review.raw).toEqual({ reviews: 7 });
-    expect(planning.raw).toEqual({ issues: 1 });
+    const values = (axis: typeof code) => axis.raw.map(({ key, value }) => [key, value]);
+    expect(values(code)).toEqual([
+      ["commits", 4],
+      ["changedLines", 120],
+      ["pullRequests", 2],
+    ]);
+    expect(values(review)).toEqual([["reviews", 7]]);
+    expect(values(planning)).toEqual([["issues", 1]]);
+  });
+
+  it("지표별 근거 종류와 축의 근거 종류를 중복 없이 반환한다", () => {
+    const [code, review, planning] = scoreTeamRows([row("a")])[0].axes;
+
+    expect(code.raw.map((item) => item.evidence)).toEqual(["commits", "commits", "pullRequests"]);
+    expect(code.evidenceKinds).toEqual(["commits", "pullRequests"]);
+    expect(review.evidenceKinds).toEqual(["reviews"]);
+    expect(planning.evidenceKinds).toEqual(["issues"]);
   });
 
   it("AI와 BOT은 결과, 인원수, 팀 합계에서 제외한다", () => {
@@ -104,10 +122,15 @@ describe("scoreTeamRows", () => {
   it("팀 전체가 0인 축은 NaN이 아니라 0이다", () => {
     const axes = axisOf(reviewers(0, 0), "review");
 
-    expect(axes).toEqual([
-      { axisId: "review", label: "리뷰", score: 0, share: 0, raw: { reviews: 0 } },
-      { axisId: "review", label: "리뷰", score: 0, share: 0, raw: { reviews: 0 } },
-    ]);
+    const zeroAxis = {
+      axisId: "review",
+      label: "리뷰",
+      score: 0,
+      share: 0,
+      raw: [{ key: "reviews", label: "리뷰", value: 0, evidence: "reviews" }],
+      evidenceKinds: ["reviews"],
+    };
+    expect(axes).toEqual([zeroAxis, zeroAxis]);
   });
 
   it("축 안에서 팀 전체가 0인 지표는 빼고 가중치를 재배분한다", () => {
@@ -117,13 +140,11 @@ describe("scoreTeamRows", () => {
     );
 
     expect(axes.map((axis) => axis.share)).toEqual([75, 25]);
-    expect(axes[0].raw.pullRequests).toBe(0);
+    expect(axes[0].raw.find((item) => item.key === "pullRequests")?.value).toBe(0);
   });
 
   it("합계가 있어도 가중치가 0인 지표만 있는 축은 0이다", () => {
-    const axes: ScoreAxis[] = [
-      { id: "x", label: "X", metrics: [{ key: "commits", weight: 0 }] },
-    ];
+    const axes: ScoreAxis[] = [{ id: "x", label: "X", metrics: [metric("commits", 0)] }];
 
     expect(axisOf([row("a", { commits: 3 })], "x", axes)[0]).toMatchObject({ score: 0, share: 0 });
   });
@@ -133,10 +154,7 @@ describe("scoreTeamRows", () => {
       {
         id: "x",
         label: "X",
-        metrics: [
-          { key: "commits", weight: 3 },
-          { key: "issues", weight: 1 },
-        ],
+        metrics: [metric("commits", 3), metric("issues")],
       },
     ];
 
@@ -151,14 +169,14 @@ describe("scoreTeamRows", () => {
 
   it("축 설정을 추가하면 계산 로직 변경 없이 결과에 포함된다", () => {
     const axes: ScoreAxis[] = [
-      { id: "review", label: "리뷰", metrics: [{ key: "reviews", weight: 1 }] },
-      { id: "meeting", label: "회의", metrics: [{ key: "deletions", weight: 1 }] },
+      { id: "review", label: "리뷰", metrics: [metric("reviews")] },
+      { id: "meeting", label: "회의", metrics: [metric("deletions")] },
     ];
 
     const [member] = scoreTeamRows([row("a", { reviews: 1, deletions: 2 })], axes);
 
     expect(member.axes.map((axis) => axis.axisId)).toEqual(["review", "meeting"]);
-    expect(member.axes[1].raw).toEqual({ deletions: 2 });
+    expect(member.axes[1].raw.map(({ key, value }) => [key, value])).toEqual([["deletions", 2]]);
   });
 
   it("팀원 묶기가 적용된 행을 기준으로 인원수와 비중을 계산한다", () => {
@@ -181,6 +199,7 @@ describe("scoreTeamRows", () => {
     expect(Object.keys(result[0]).sort()).toEqual(["axes", "displayName", "id"]);
     expect(Object.keys(result[0].axes[0]).sort()).toEqual([
       "axisId",
+      "evidenceKinds",
       "label",
       "raw",
       "score",

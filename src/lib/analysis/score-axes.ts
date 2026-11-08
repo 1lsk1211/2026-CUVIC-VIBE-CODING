@@ -1,12 +1,21 @@
+import type { AuthorEvidence } from "@/types/github";
 import type { TeamRow } from "./apply-team-mapping";
 
 type NumericKey<T> = { [K in keyof T]: T[K] extends number ? K : never }[keyof T];
 
 export type ScoreMetricKey = NumericKey<TeamRow>;
 
+export type EvidenceKind = keyof AuthorEvidence;
+
+/** 팀원 수로 똑같이 나눈 몫에 해당하는 점수 */
+export const EVEN_SHARE_SCORE = 50;
+
 export interface ScoreMetric {
   key: ScoreMetricKey;
+  label: string;
   weight: number;
+  /** 이 수치의 근거가 들어 있는 목록 */
+  evidence: EvidenceKind;
 }
 
 export interface ScoreAxis {
@@ -21,14 +30,29 @@ export const SCORE_AXES: readonly ScoreAxis[] = [
     id: "code",
     label: "코드",
     metrics: [
-      { key: "commits", weight: 1 },
-      { key: "changedLines", weight: 1 },
-      { key: "pullRequests", weight: 1 },
+      { key: "commits", label: "커밋", weight: 1, evidence: "commits" },
+      { key: "changedLines", label: "변경 라인", weight: 1, evidence: "commits" },
+      { key: "pullRequests", label: "PR", weight: 1, evidence: "pullRequests" },
     ],
   },
-  { id: "review", label: "리뷰", metrics: [{ key: "reviews", weight: 1 }] },
-  { id: "planning", label: "이슈·기획", metrics: [{ key: "issues", weight: 1 }] },
+  {
+    id: "review",
+    label: "리뷰",
+    metrics: [{ key: "reviews", label: "리뷰", weight: 1, evidence: "reviews" }],
+  },
+  {
+    id: "planning",
+    label: "이슈·기획",
+    metrics: [{ key: "issues", label: "이슈", weight: 1, evidence: "issues" }],
+  },
 ];
+
+export interface RawMetric {
+  key: ScoreMetricKey;
+  label: string;
+  value: number;
+  evidence: EvidenceKind;
+}
 
 export interface AxisScore {
   axisId: string;
@@ -38,7 +62,9 @@ export interface AxisScore {
   /** 팀 합계에서 차지하는 비중(%) */
   share: number;
   /** 점수의 바탕이 된 원래 수치 */
-  raw: Partial<Record<ScoreMetricKey, number>>;
+  raw: RawMetric[];
+  /** 이 축의 근거가 들어 있는 목록. 중복 없음 */
+  evidenceKinds: EvidenceKind[];
 }
 
 export interface MemberScores {
@@ -82,9 +108,15 @@ export function scoreTeamRows(
       return {
         axisId: axis.id,
         label: axis.label,
-        score: Math.round(Math.min((share * members.length) / 2, 100)),
+        score: Math.round(Math.min((share * members.length * EVEN_SHARE_SCORE) / 100, 100)),
         share: Math.round(share),
-        raw: Object.fromEntries(axis.metrics.map(({ key }) => [key, member[key]])),
+        raw: axis.metrics.map(({ key, label, evidence }) => ({
+          key,
+          label,
+          value: member[key],
+          evidence,
+        })),
+        evidenceKinds: [...new Set(axis.metrics.map((metric) => metric.evidence))],
       };
     }),
   }));
